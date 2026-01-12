@@ -22,10 +22,12 @@ menu() {
 }
 
 install_linux() {
+    echo "Updating Termux packages..."
+    echo "If you see any pop-ups about configuration files, press Enter to keep the default option."
     apt update && apt upgrade -y
 
     if ! command -v proot-distro &> /dev/null; then
-        apt install proot-distro -y
+        apt install -y proot-distro
     fi
 
     echo "Available distros:"
@@ -37,6 +39,22 @@ install_linux() {
     read -p "VNC resolution (default 1920x1080): " RES
     RES=${RES:-1920x1080}
 
+    VNC_PASSWD="1234"
+
+    echo ""
+    echo "=== Confirm Your Configuration ==="
+    echo "Distro:         $DISTRO"
+    echo "Username:       $USERNAME"
+    echo "Install GUI:    $INSTALL_GUI"
+    echo "VNC Resolution: $RES"
+    echo "VNC Password:   $VNC_PASSWD"
+    echo ""
+    read -p "Proceed with installation? (y/N): " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
+        echo "Installation cancelled."
+        exit 0
+    fi
+
     echo "Installing $DISTRO..."
     proot-distro install "$DISTRO"
 
@@ -46,7 +64,9 @@ install_linux() {
 apt update && apt upgrade -y
 apt install -y sudo adduser passwd apt-utils dialog tzdata
 
-adduser --gecos "" $USERNAME
+adduser --gecos "" "$USERNAME"
+passwd -d "$USERNAME"
+
 echo "$USERNAME ALL=(ALL:ALL) ALL" >> /etc/sudoers
 
 if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
@@ -56,21 +76,24 @@ EOF
 
     if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
     proot-distro login "$DISTRO" -- /bin/bash <<EOF
-sudo -u $USERNAME bash <<EOD
+sudo -u "$USERNAME" bash <<EOD
+mkdir -p "\$HOME/.vnc"
+echo "$VNC_PASSWD" | vncpasswd -f > "\$HOME/.vnc/passwd"
+chmod 600 "\$HOME/.vnc/passwd"
+
 vncserver :1
 vncserver -kill :1
 
-mkdir -p /home/$USERNAME/.vnc
-cat > /home/$USERNAME/.vnc/xstartup <<'EOS'
+cat > "\$HOME/.vnc/xstartup" <<'EOS'
 #!/bin/bash
 xrdb \$HOME/.Xresources
 exec startlxde &
 EOS
 
-chmod +x /home/$USERNAME/.vnc/xstartup
+chmod +x "\$HOME/.vnc/xstartup"
 
-echo "alias startvnc='vncserver -geometry $RES :1'" >> /home/$USERNAME/.bashrc
-echo "alias stopvnc='vncserver -kill :1'" >> /home/$USERNAME/.bashrc
+echo "alias startvnc='vncserver -geometry $RES :1'" >> "\$HOME/.bashrc"
+echo "alias stopvnc='vncserver -kill :1'" >> "\$HOME/.bashrc"
 EOD
 EOF
     fi
@@ -81,30 +104,37 @@ DISTRO=$DISTRO
 USERNAME=$USERNAME
 GUI=$INSTALL_GUI
 RESOLUTION=$RES
+VNC_PASSWD=$VNC_PASSWD
 EOF
 
     echo "Creating Termux alias for $DISTRO..."
 
     ALIAS_CMD="proot-distro login $DISTRO -- su - $USERNAME"
-
     if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
         ALIAS_CMD="$ALIAS_CMD -c 'startvnc; bash'"
     else
         ALIAS_CMD="$ALIAS_CMD -c 'bash'"
     fi
 
-    echo "alias launch-$DISTRO=\"$ALIAS_CMD\"" >> $HOME/.bashrc
+    echo "alias launch-$DISTRO=\"$ALIAS_CMD\"" >> "$HOME/.bashrc"
 
     echo "=== Installation complete! ==="
-    echo "Login with: proot-distro login $DISTRO --"
-    echo "Switch user: su - $USERNAME"
-    [[ "$INSTALL_GUI" =~ ^[yY]$ ]] && echo "Start desktop: startvnc"
-    echo "Quick launch: launch-$DISTRO"
+    echo "Login with:      proot-distro login $DISTRO --"
+    echo "Switch user:     su - $USERNAME"
+    [[ "$INSTALL_GUI" =~ ^[yY]$ ]] && echo "Start desktop:    startvnc"
+    echo "Quick launch:    launch-$DISTRO"
+    echo "VNC password:    $VNC_PASSWD"
+    echo "Reload aliases:  source ~/.bashrc"
 }
 
 uninstall_one() {
+    if ! ls "$CONFIG_DIR"/*.conf &>/dev/null; then
+        echo "No installed distros found."
+        return
+    fi
+
     echo "Installed distros:"
-    ls "$CONFIG_DIR" | sed 's/.conf//'
+    ls "$CONFIG_DIR" | sed 's/.conf$//'
 
     read -p "Enter distro to uninstall: " DISTRO
 
@@ -116,36 +146,49 @@ uninstall_one() {
     fi
 
     read -p "Remove distro '$DISTRO'? (y/N): " CONFIRM
-    [[ ! "$CONFIRM" =~ ^[yY]$ ]] && exit 0
+    if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
+        echo "Uninstall cancelled."
+        exit 0
+    fi
 
-    proot-distro remove "$DISTRO"
+    proot-distro remove "$DISTRO" || true
     rm -f "$CONFIG_FILE"
 
-    sed -i "/alias launch-$DISTRO=/d" $HOME/.bashrc
+    sed -i "/alias launch-$DISTRO=/d" "$HOME/.bashrc" || true
 
     echo "Removed $DISTRO"
 }
 
 uninstall_all() {
-    echo "This will remove ALL installed distros."
+    if ! ls "$CONFIG_DIR"/*.conf &>/dev/null; then
+        echo "No installed distros found."
+        return
+    fi
+
+    echo "This will remove ALL installed distros and their configs."
     read -p "Are you sure? (y/N): " CONFIRM
-    [[ ! "$CONFIRM" =~ ^[yY]$ ]] && exit 0
+    if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
+        echo "Uninstall cancelled."
+        exit 0
+    fi
 
     for FILE in "$CONFIG_DIR"/*.conf; do
         [[ -e "$FILE" ]] || continue
         source "$FILE"
-        echo "Removing $DISTRO..."
-        proot-distro remove "$DISTRO"
+        if [[ -n "$DISTRO" ]]; then
+            echo "Removing $DISTRO..."
+            proot-distro remove "$DISTRO" || true
+        fi
         rm -f "$FILE"
     done
 
-    sed -i "/alias launch-/d" $HOME/.bashrc
+    sed -i "/alias launch-/d" "$HOME/.bashrc" || true
 
     echo "All distros removed."
 
     read -p "Remove proot-distro as well? (y/N): " REMOVE_PROOT
     if [[ "$REMOVE_PROOT" =~ ^[yY]$ ]]; then
-        apt remove -y proot-distro
+        apt remove -y proot-distro || true
     fi
 
     echo "Cleanup complete."

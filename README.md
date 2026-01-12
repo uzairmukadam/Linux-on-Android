@@ -197,7 +197,7 @@ All associated config files are removed automatically.
 
 ## ❤️ Why This Project Exists
 
-Android devices often outlive their intended purpose — yet their hardware remains surprisingly capable.  
+Android devices often outlive their intended purpose, yet their hardware remains surprisingly capable.  
 This project aims to:
 
 - Extend the life of older phones/tablets  
