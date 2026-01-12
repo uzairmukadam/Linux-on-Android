@@ -57,10 +57,12 @@ if [[ "$ACTION" == "1" ]]; then
     echo "🎉 Installation complete!"
     echo "Configuring user inside $DISTRO..."
 
-    # Create user and aliases
+    # Essential packages + user creation
     proot-distro login "$DISTRO" -- /bin/bash <<EOF
 apt update && apt upgrade -y
-apt install sudo -y
+
+# Install essential packages
+apt install -y sudo passwd adduser apt-utils dialog tzdata
 
 echo "👤 Creating user '$LINUX_USER'..."
 adduser --gecos "" "$LINUX_USER"
@@ -88,6 +90,7 @@ EOF
         echo "🖥 Setting up LXDE + VNC..."
 
         proot-distro login "$DISTRO" -- /bin/bash <<EOF
+apt update
 apt install -y lxde lxterminal tightvncserver
 
 # Run VNC setup as the new user
