@@ -62,18 +62,25 @@ install_linux() {
 
     proot-distro login "$DISTRO" -- /bin/bash <<EOF
 apt update && apt upgrade -y
-apt install -y sudo adduser passwd apt-utils dialog tzdata
 
-adduser --gecos "" "$USERNAME"
+# Minimal required packages only
+apt install -y sudo passwd
+
+# Create passwordless user
+useradd -m -s /bin/bash "$USERNAME"
 passwd -d "$USERNAME" 2>/dev/null || true
 
-echo "$USERNAME ALL=(ALL:ALL) ALL" >> /etc/sudoers
+# Grant sudo
+echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USERNAME
+chmod 440 /etc/sudoers.d/$USERNAME
 
+# Install GUI only if requested
 if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
-    apt install -y lxde lxterminal tightvncserver || apt install -y tightvncserver
+    apt install -y lxde tightvncserver
 fi
 EOF
 
+    # VNC setup only if GUI installed
     if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
     proot-distro login "$DISTRO" -- /bin/bash <<EOF
 if ! command -v vncserver >/dev/null; then
@@ -156,7 +163,7 @@ uninstall_one() {
         exit 0
     fi
 
-    proot-distro remove "$DISTRO" || true
+    proot-distro.remove "$DISTRO" || true
     rm -f "$CONFIG_FILE"
 
     sed -i "/alias launch-$DISTRO=/d" "$HOME/.bashrc" || true
