@@ -29,7 +29,6 @@ read -p "Enter 1 or 2: " ACTION
 # INSTALLATION FLOW
 # ----------------------------
 if [[ "$ACTION" == "1" ]]; then
-    # List available distros
     echo "📋 Available Linux distributions:"
     proot-distro list
 
@@ -37,86 +36,83 @@ if [[ "$ACTION" == "1" ]]; then
     read -p "Enter the username you want to create inside Linux: " LINUX_USER
     read -p "Do you want to install a desktop environment (LXDE + VNC)? (y/N): " INSTALL_GUI
 
-    # Ask for VNC resolution if GUI is requested
-    if [[ "$INSTALL_GUI" == "y" || "$INSTALL_GUI" == "Y" ]]; then
+    if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
         echo "Available resolutions: 1024x768, 1280x720, 1920x1080"
         read -p "Enter desired VNC resolution (default 1920x1080): " VNC_RES
         VNC_RES=${VNC_RES:-1920x1080}
     fi
 
-    # Confirm
     echo "--------------------------------"
-    echo "Summary of selections:"
     echo "Linux Distro: $DISTRO"
     echo "Username: $LINUX_USER"
     echo "Install Desktop: $INSTALL_GUI"
     [[ -n "$VNC_RES" ]] && echo "VNC Resolution: $VNC_RES"
     echo "--------------------------------"
     read -p "Proceed with installation? (y/N): " CONFIRM
-    if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-        echo "Aborting installation."
-        exit 0
-    fi
+    [[ ! "$CONFIRM" =~ ^[yY]$ ]] && echo "Aborting." && exit 0
 
-    # Install the distro
     echo "🚀 Installing $DISTRO..."
     proot-distro install "$DISTRO"
 
     echo "🎉 Installation complete!"
-    echo "Logging in to $DISTRO to configure user..."
-    proot-distro login "$DISTRO" /bin/bash <<EOF
-# Inside distro
-echo "📦 Updating packages..."
-apt update && apt upgrade -y
+    echo "Configuring user inside $DISTRO..."
 
-# Create user
-echo "👤 Creating user '$LINUX_USER'..."
+    # Create user and aliases
+    proot-distro login "$DISTRO" -- /bin/bash <<EOF
+apt update && apt upgrade -y
 apt install sudo -y
+
+echo "👤 Creating user '$LINUX_USER'..."
 adduser --gecos "" "$LINUX_USER"
 usermod -aG sudo "$LINUX_USER"
-echo "✅ User '$LINUX_USER' created"
 
-# Switch to new user automatically
-echo "🔄 Switching to $LINUX_USER..."
-su - "$LINUX_USER"
+# Add aliases to the user's .bashrc
+echo "📌 Adding aliases..."
+cat >> /home/$LINUX_USER/.bashrc <<EOD
+alias login='proot-distro login $DISTRO'
+EOD
 
-# Optional aliases
-echo "📌 Creating helpful aliases..."
-echo "alias startvnc='vncserver -geometry $VNC_RES :1'" >> ~/.bashrc
-echo "alias stopvnc='vncserver -kill :1'" >> ~/.bashrc
-echo "alias login='proot-distro login $DISTRO'" >> ~/.bashrc
+# Add VNC aliases only if GUI is selected
+if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
+cat >> /home/$LINUX_USER/.bashrc <<EOD
+alias startvnc='vncserver -geometry $VNC_RES :1'
+alias stopvnc='vncserver -kill :1'
+EOD
+fi
+
+chown $LINUX_USER:$LINUX_USER /home/$LINUX_USER/.bashrc
 EOF
 
-    # Optional GUI setup
-    if [[ "$INSTALL_GUI" == "y" || "$INSTALL_GUI" == "Y" ]]; then
-        proot-distro login "$DISTRO" /bin/bash <<EOF
-echo "📦 Installing LXDE..."
-apt install lxde -y
-echo "📦 Installing TightVNC server..."
-apt install tightvncserver -y
+    # GUI Setup
+    if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
+        echo "🖥 Setting up LXDE + VNC..."
 
-# Initial VNC setup
+        proot-distro login "$DISTRO" -- /bin/bash <<EOF
+apt install -y lxde lxterminal tightvncserver
+
+# Run VNC setup as the new user
+sudo -u $LINUX_USER bash <<EOD
 vncserver :1
 vncserver -kill :1
-mkdir -p ~/.vnc
-cat > ~/.vnc/xstartup << 'EOD'
+
+mkdir -p /home/$LINUX_USER/.vnc
+cat > /home/$LINUX_USER/.vnc/xstartup <<'EOS'
 #!/bin/bash
 xrdb \$HOME/.Xresources
-exec startlxde &
-EOD
-chmod +x ~/.vnc/xstartup
+startlxde &
+EOS
 
-echo "✅ Desktop setup complete!"
-echo "Start desktop with: startvnc"
+chmod +x /home/$LINUX_USER/.vnc/xstartup
+EOD
+
 EOF
+
+        echo "✅ Desktop setup complete!"
     fi
 
     echo "🎉 Installation finished!"
     echo "Login with: proot-distro login $DISTRO"
-    if [[ "$INSTALL_GUI" == "y" || "$INSTALL_GUI" == "Y" ]]; then
-        echo "Start desktop with: startvnc"
-        echo "Stop desktop with: stopvnc"
-    fi
+    [[ "$INSTALL_GUI" =~ ^[yY]$ ]] && echo "Start desktop with: startvnc"
 
 # ----------------------------
 # UNINSTALL FLOW
@@ -126,21 +122,16 @@ elif [[ "$ACTION" == "2" ]]; then
     proot-distro list
 
     read -p "Enter the distro you want to uninstall: " DISTRO_REMOVE
-    read -p "⚠️ Are you sure you want to completely remove '$DISTRO_REMOVE'? (y/N): " CONFIRM_REMOVE
-    if [[ "$CONFIRM_REMOVE" != "y" && "$CONFIRM_REMOVE" != "Y" ]]; then
-        echo "Aborting uninstall."
-        exit 0
-    fi
+    read -p "⚠️ Are you sure you want to remove '$DISTRO_REMOVE'? (y/N): " CONFIRM_REMOVE
+    [[ ! "$CONFIRM_REMOVE" =~ ^[yY]$ ]] && echo "Aborting." && exit 0
 
     echo "🗑 Removing $DISTRO_REMOVE..."
     proot-distro remove "$DISTRO_REMOVE"
     echo "✅ $DISTRO_REMOVE removed!"
 
-    read -p "Do you want to remove proot-distro as well? (y/N): " REMOVE_PROOT
-    if [[ "$REMOVE_PROOT" == "y" || "$REMOVE_PROOT" == "Y" ]]; then
-        apt remove proot-distro -y
-        echo "✅ proot-distro removed!"
-    fi
+    read -p "Remove proot-distro too? (y/N): " REMOVE_PROOT
+    [[ "$REMOVE_PROOT" =~ ^[yY]$ ]] && apt remove proot-distro -y && echo "✅ proot-distro removed!"
+
 else
     echo "❌ Invalid option. Exiting."
     exit 1

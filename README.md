@@ -50,7 +50,7 @@ This tool provides a **beginner-friendly, reversible, and efficient Linux enviro
 2. Download or clone this repository:
 
 ```bash
-git clone https://github.com/username/linux-on-android.git
+git clone https://github.com/uzairmukadam/linux-on-android.git
 cd linux-on-android
 ```
 
