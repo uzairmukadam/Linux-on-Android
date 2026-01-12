@@ -1,15 +1,25 @@
 #!/bin/bash
 set -e
 
+# ===== Colors =====
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+BLUE="\033[1;34m"
+MAGENTA="\033[1;35m"
+CYAN="\033[1;36m"
+RESET="\033[0m"
+BOLD="\033[1m"
+
 CONFIG_DIR="$PREFIX/etc/linux-on-android"
 mkdir -p "$CONFIG_DIR"
 
 menu() {
-    echo "=== Linux on Android Manager ==="
-    echo "1) Install a Linux distro"
-    echo "2) Uninstall a specific distro"
-    echo "3) Uninstall ALL distros"
-    echo "4) Exit"
+    echo -e "${CYAN}${BOLD}=== Linux on Android Manager ===${RESET}"
+    echo -e "${YELLOW}1) Install a Linux distro${RESET}"
+    echo -e "${YELLOW}2) Uninstall a specific distro${RESET}"
+    echo -e "${YELLOW}3) Uninstall ALL distros${RESET}"
+    echo -e "${YELLOW}4) Exit${RESET}"
     read -p "Choose an option: " CHOICE
 
     case "$CHOICE" in
@@ -17,20 +27,21 @@ menu() {
         2) uninstall_one ;;
         3) uninstall_all ;;
         4) exit 0 ;;
-        *) echo "Invalid choice"; menu ;;
+        *) echo -e "${RED}Invalid choice${RESET}"; menu ;;
     esac
 }
 
 install_linux() {
-    echo "Updating Termux packages..."
-    echo "If you see any pop-ups about configuration files, press Enter to keep the default option."
+    echo -e "${BLUE}Updating Termux packages...${RESET}"
+    echo -e "${YELLOW}If you see config pop-ups, press Enter to keep defaults.${RESET}"
     apt update && apt upgrade -y
 
     if ! command -v proot-distro &> /dev/null; then
+        echo -e "${BLUE}Installing proot-distro...${RESET}"
         apt install -y proot-distro
     fi
 
-    echo "Available distros:"
+    echo -e "${CYAN}Available distros:${RESET}"
     proot-distro list
 
     read -p "Enter distro to install (e.g., debian): " DISTRO
@@ -42,75 +53,70 @@ install_linux() {
     VNC_PASSWD="1234"
 
     echo ""
-    echo "=== Confirm Your Configuration ==="
-    echo "Distro:         $DISTRO"
-    echo "Username:       $USERNAME"
-    echo "Install GUI:    $INSTALL_GUI"
-    echo "VNC Resolution: $RES"
-    echo "VNC Password:   $VNC_PASSWD"
+    echo -e "${CYAN}${BOLD}=== Confirm Your Configuration ===${RESET}"
+    echo -e "${YELLOW}Distro:        ${RESET}$DISTRO"
+    echo -e "${YELLOW}Username:      ${RESET}$USERNAME"
+    echo -e "${YELLOW}Install GUI:   ${RESET}$INSTALL_GUI"
+    echo -e "${YELLOW}Resolution:    ${RESET}$RES"
+    echo -e "${YELLOW}VNC Password:  ${RESET}$VNC_PASSWD"
     echo ""
     read -p "Proceed with installation? (y/N): " CONFIRM
     if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
-        echo "Installation cancelled."
+        echo -e "${RED}Installation cancelled.${RESET}"
         exit 0
     fi
 
-    echo "Installing $DISTRO..."
+    echo -e "${BLUE}Installing $DISTRO...${RESET}"
     proot-distro install "$DISTRO"
 
-    echo "Configuring inside $DISTRO..."
+    echo -e "${BLUE}Configuring inside $DISTRO...${RESET}"
 
-    proot-distro login "$DISTRO" -- /bin/bash <<EOF
+    proot-distro login "$DISTRO" -- bash -lc "
 apt update && apt upgrade -y
 
-# Minimal required packages only
 apt install -y sudo passwd
 
-# Create passwordless user
-useradd -m -s /bin/bash "$USERNAME"
-passwd -d "$USERNAME" 2>/dev/null || true
+useradd -m -s /bin/bash $USERNAME
+passwd -d $USERNAME 2>/dev/null || true
 
-# Grant sudo
-echo "$USERNAME ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USERNAME
+echo \"$USERNAME ALL=(ALL:ALL) NOPASSWD: ALL\" > /etc/sudoers.d/$USERNAME
 chmod 440 /etc/sudoers.d/$USERNAME
 
-# Install GUI only if requested
-if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
+if [[ \"$INSTALL_GUI\" =~ ^[yY]$ ]]; then
     apt install -y lxde tightvncserver
 fi
-EOF
+"
 
-    # VNC setup only if GUI installed
     if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
-    proot-distro login "$DISTRO" -- /bin/bash <<EOF
+    proot-distro login "$DISTRO" -- bash -lc "
 if ! command -v vncserver >/dev/null; then
-    echo "VNC installation failed. Skipping VNC setup."
+    echo -e '${RED}VNC installation failed. Skipping setup.${RESET}'
     exit 0
 fi
 
-sudo -u "$USERNAME" bash <<EOD
-mkdir -p "\$HOME/.vnc"
-echo "$VNC_PASSWD" | vncpasswd -f > "\$HOME/.vnc/passwd"
-chmod 600 "\$HOME/.vnc/passwd"
+echo -e '${BLUE}Cleaning stale VNC lock files...${RESET}'
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
 
-vncserver :1 || true
-vncserver -kill :1 || true
+sudo -u $USERNAME bash -lc '
+mkdir -p /home/$USERNAME/.vnc
+echo \"$VNC_PASSWD\" | vncpasswd -f > /home/$USERNAME/.vnc/passwd
+chmod 600 /home/$USERNAME/.vnc/passwd
 
-cat > "\$HOME/.vnc/xstartup" <<'EOS'
+cat > /home/$USERNAME/.vnc/xstartup <<EOS
 #!/bin/bash
 xrdb \$HOME/.Xresources
 exec startlxde &
 EOS
 
-chmod +x "\$HOME/.vnc/xstartup"
+chmod +x /home/$USERNAME/.vnc/xstartup
 
-echo "alias startvnc='vncserver -geometry $RES :1'" >> "\$HOME/.bashrc"
-echo "alias stopvnc='vncserver -kill :1'" >> "\$HOME/.bashrc"
-EOD
-EOF
+vncserver -geometry $RES :1 || true
+vncserver -kill :1 || true
+'
+"
     fi
 
-    echo "Saving config..."
+    echo -e "${BLUE}Saving config...${RESET}"
     cat > "$CONFIG_DIR/$DISTRO.conf" <<EOF
 DISTRO=$DISTRO
 USERNAME=$USERNAME
@@ -119,33 +125,21 @@ RESOLUTION=$RES
 VNC_PASSWD=$VNC_PASSWD
 EOF
 
-    echo "Creating Termux alias for $DISTRO..."
-
-    ALIAS_CMD="proot-distro login $DISTRO -- su - $USERNAME"
-    if [[ "$INSTALL_GUI" =~ ^[yY]$ ]]; then
-        ALIAS_CMD="$ALIAS_CMD -c 'startvnc; bash'"
-    else
-        ALIAS_CMD="$ALIAS_CMD -c 'bash'"
-    fi
-
-    echo "alias launch-$DISTRO=\"$ALIAS_CMD\"" >> "$HOME/.bashrc"
-
-    echo "=== Installation complete! ==="
-    echo "Login with:      proot-distro login $DISTRO --"
-    echo "Switch user:     su - $USERNAME"
-    [[ "$INSTALL_GUI" =~ ^[yY]$ ]] && echo "Start desktop:    startvnc"
-    echo "Quick launch:    launch-$DISTRO"
-    echo "VNC password:    $VNC_PASSWD"
-    echo "Reload aliases:  source ~/.bashrc"
+    echo -e "${GREEN}${BOLD}=== Installation complete! ===${RESET}"
+    echo -e "${CYAN}Login with:${RESET}      proot-distro login $DISTRO --"
+    echo -e "${CYAN}Switch user:${RESET}     su - $USERNAME"
+    [[ "$INSTALL_GUI" =~ ^[yY]$ ]] && echo -e "${CYAN}Start VNC:${RESET}       vncserver -geometry $RES :1"
+    echo -e "${CYAN}Stop VNC:${RESET}        vncserver -kill :1"
+    echo -e "${CYAN}VNC password:${RESET}    $VNC_PASSWD"
 }
 
 uninstall_one() {
     if ! ls "$CONFIG_DIR"/*.conf &>/dev/null; then
-        echo "No installed distros found."
+        echo -e "${RED}No installed distros found.${RESET}"
         return
     fi
 
-    echo "Installed distros:"
+    echo -e "${CYAN}Installed distros:${RESET}"
     ls "$CONFIG_DIR" | sed 's/.conf$//'
 
     read -p "Enter distro to uninstall: " DISTRO
@@ -153,34 +147,32 @@ uninstall_one() {
     CONFIG_FILE="$CONFIG_DIR/$DISTRO.conf"
 
     if [[ ! -f "$CONFIG_FILE" ]]; then
-        echo "No config found for $DISTRO"
+        echo -e "${RED}No config found for $DISTRO${RESET}"
         exit 1
     fi
 
     read -p "Remove distro '$DISTRO'? (y/N): " CONFIRM
     if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
-        echo "Uninstall cancelled."
+        echo -e "${YELLOW}Uninstall cancelled.${RESET}"
         exit 0
     fi
 
-    proot-distro.remove "$DISTRO" || true
+    proot-distro remove "$DISTRO" || true
     rm -f "$CONFIG_FILE"
 
-    sed -i "/alias launch-$DISTRO=/d" "$HOME/.bashrc" || true
-
-    echo "Removed $DISTRO"
+    echo -e "${GREEN}Removed $DISTRO${RESET}"
 }
 
 uninstall_all() {
     if ! ls "$CONFIG_DIR"/*.conf &>/dev/null; then
-        echo "No installed distros found."
+        echo -e "${RED}No installed distros found.${RESET}"
         return
     fi
 
-    echo "This will remove ALL installed distros and their configs."
+    echo -e "${RED}${BOLD}This will remove ALL installed distros and configs.${RESET}"
     read -p "Are you sure? (y/N): " CONFIRM
     if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
-        echo "Uninstall cancelled."
+        echo -e "${YELLOW}Uninstall cancelled.${RESET}"
         exit 0
     fi
 
@@ -188,22 +180,20 @@ uninstall_all() {
         [[ -e "$FILE" ]] || continue
         source "$FILE"
         if [[ -n "$DISTRO" ]]; then
-            echo "Removing $DISTRO..."
+            echo -e "${BLUE}Removing $DISTRO...${RESET}"
             proot-distro remove "$DISTRO" || true
         fi
         rm -f "$FILE"
     done
 
-    sed -i "/alias launch-/d" "$HOME/.bashrc" || true
-
-    echo "All distros removed."
+    echo -e "${GREEN}All distros removed.${RESET}"
 
     read -p "Remove proot-distro as well? (y/N): " REMOVE_PROOT
     if [[ "$REMOVE_PROOT" =~ ^[yY]$ ]]; then
         apt remove -y proot-distro || true
     fi
 
-    echo "Cleanup complete."
+    echo -e "${GREEN}Cleanup complete.${RESET}"
 }
 
 menu
