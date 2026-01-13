@@ -276,36 +276,92 @@ apt install proot-distro -y
 
 ---
 
-# ❓ FAQ
+## ❓ FAQ
 
-### **Q: Why use `proot-distro login <distro> --` instead of `proot-distro login <distro>`?**  
-The `--` ensures commands run inside a proper login shell with correct environment variables.
+### **Q: Why are so many packages missing in my Linux-on-Android install?**
+Most `proot-distro` rootfs images are **intentionally minimal**. They include only the bare essentials needed to boot a userspace environment. This keeps downloads small, reduces storage usage, and speeds up installation — but it also means many common tools are not included by default.
 
----
+It’s normal for the following to be missing:
 
-### **Q: Why use `su - username` instead of `su username`?**  
-`su -` loads the full login environment (PATH, DBus, configs).  
-`su` does not — and breaks desktops and VNC.
+- Editors (`nano`, `vim`, `micro`)
 
----
+- Build tools (`make`, `gcc`, `cmake`, `pkg-config`)
+
+- Networking utilities (`curl`, `wget`, `net-tools`)
+
+- Compression tools (`zip`, `unzip`, `tar`, `xz-utils`)
+
+- GUI components (if you didn’t install a desktop environment)
+
+You can install any of these manually using your distro’s package manager.
+
+### **Q: How do I install missing packages?**
+Use your distro’s package manager:
+
+- Debian/Ubuntu: `sudo apt install <package>`
+
+- Arch Linux: `sudo pacman -S <package>`
+
+- Alpine: `sudo apk add <package>`
+
+- Fedora: `sudo dnf install <package>`
+
+- Void Linux: `sudo xbps-install <package>`
+
+### **Q: Why does my distro say “Unable to locate package <package>”?**
+This usually means one of the following:
+
+- Your rootfs image is extremely minimal
+
+- Your package lists are outdated
+
+- Optional repositories (like “community”, “extra”, “contrib”, or “nonfree”) are disabled
+
+- The package isn’t available for your architecture (ARM vs ARM64 vs x86_64)
+
+Updating your package lists or enabling additional repositories typically fixes this.
+
+### **Q: Where can I learn more about my distro’s package system?**
+Here are official resources for each major distro supported by proot-distro:
+
+- Debian/Ubuntu: https://wiki.debian.org/Apt
+
+- Arch Linux: https://wiki.archlinux.org/title/Pacman
+
+- Alpine: https://wiki.alpinelinux.org/wiki/Alpine_Linux_package_management
+
+- Fedora: https://docs.fedoraproject.org/en-US/quick-docs/dnf/
+
+- Void Linux: https://docs.voidlinux.org/xbps/index.html
+
+These pages explain how to enable extra repositories, install missing tools, and troubleshoot package issues.
+
+### **Q: Does this give me real hardware access (GPU, kernel modules, etc.)?**  
+No. proot runs in userspace and cannot access kernel‑level hardware like GPU, DRM, or kernel modules.
+
+### **Q: Why can’t I use systemd?**  
+proot does not support PID 1 or kernel‑level init systems. Use supervisord or run services manually.
+
+### **Q: Why do I need `su - <username>` instead of `su <username>`?**  
+`su -` loads a full login environment (PATH, HOME, DBus, configs).  
+`su` does not, and it breaks desktops and VNC.
+
+### **Q: Why does VNC show “No session for pid XXXX”?**  
+This usually means an LXDE component failed to attach to the session.  
+Check:
+
+```
+~/.cache/lxsession/LXDE/run.log
+```
 
 ### **Q: Can I install XFCE, KDE, or GNOME?**  
 Yes, but they are heavy and may perform poorly on older devices. LXDE is recommended.
 
----
-
 ### **Q: Can I run Docker or LXC?**  
-No — they require kernel features unavailable in proot.
+No, they require kernel features unavailable in proot.
 
----
-
-### **Q: Can I get GPU acceleration?**  
-No — Android does not expose GPU hardware to proot environments.
-
----
-
-### **Q: Can I use this on x86 devices?**  
-Yes — Termux supports ARM, ARM64, and x86_64 depending on your device.
+### **Q: Can I use this on a non‑ARM device?**  
+Yes. proot-distro supports ARM, ARM64, and x86_64 depending on Termux architecture.
 
 ---
 

@@ -246,6 +246,64 @@ Any distro supported by `proot-distro`, including:
 
 ## ❓ FAQ
 
+### **Q: Why are so many packages missing in my Linux-on-Android install?**
+Most `proot-distro` rootfs images are **intentionally minimal**. They include only the bare essentials needed to boot a userspace environment. This keeps downloads small, reduces storage usage, and speeds up installation — but it also means many common tools are not included by default.
+
+It’s normal for the following to be missing:
+
+- Editors (`nano`, `vim`, `micro`)
+
+- Build tools (`make`, `gcc`, `cmake`, `pkg-config`)
+
+- Networking utilities (`curl`, `wget`, `net-tools`)
+
+- Compression tools (`zip`, `unzip`, `tar`, `xz-utils`)
+
+- GUI components (if you didn’t install a desktop environment)
+
+You can install any of these manually using your distro’s package manager.
+
+### **Q: How do I install missing packages?**
+Use your distro’s package manager:
+
+- Debian/Ubuntu: `sudo apt install <package>`
+
+- Arch Linux: `sudo pacman -S <package>`
+
+- Alpine: `sudo apk add <package>`
+
+- Fedora: `sudo dnf install <package>`
+
+- Void Linux: `sudo xbps-install <package>`
+
+### **Q: Why does my distro say “Unable to locate package <package>”?**
+This usually means one of the following:
+
+- Your rootfs image is extremely minimal
+
+- Your package lists are outdated
+
+- Optional repositories (like “community”, “extra”, “contrib”, or “nonfree”) are disabled
+
+- The package isn’t available for your architecture (ARM vs ARM64 vs x86_64)
+
+Updating your package lists or enabling additional repositories typically fixes this.
+
+### **Q: Where can I learn more about my distro’s package system?**
+Here are official resources for each major distro supported by proot-distro:
+
+- Debian/Ubuntu: https://wiki.debian.org/Apt
+
+- Arch Linux: https://wiki.archlinux.org/title/Pacman
+
+- Alpine: https://wiki.alpinelinux.org/wiki/Alpine_Linux_package_management
+
+- Fedora: https://docs.fedoraproject.org/en-US/quick-docs/dnf/
+
+- Void Linux: https://docs.voidlinux.org/xbps/index.html
+
+These pages explain how to enable extra repositories, install missing tools, and troubleshoot package issues.
+
 ### **Q: Does this give me real hardware access (GPU, kernel modules, etc.)?**  
 No. proot runs in userspace and cannot access kernel‑level hardware like GPU, DRM, or kernel modules.
 
